@@ -1,7 +1,7 @@
 # VideoProjector transform estimator
 
 A simple python script to estimate the transform ( homography ) that would allow to undistort the image of a video projector not frontoparallel to the screen.
-It was written to be used with `xrandr --transform.
+It was written to be used with `xrandr --transform`.
 Unfortunately, I can't get it ( `xrandr --transform`) to work properly.
 Maybe you'll be more lucky than me ( please tell if so ).
 
