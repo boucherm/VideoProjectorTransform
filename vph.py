@@ -1,7 +1,9 @@
-# Examples:
+# Notes to self
+#
+# Pygame examples:
 # /usr/share/doc/python-pygame/examples
 #
-# Docs:
+# doc:
 # https://www.pygame.org/docs/ref/key.html
 
 import math as m
@@ -9,13 +11,26 @@ import numpy as np
 import pygame
 from   pygame.locals import *
 import sys
+try:
+  import cv2
+  HAS_OPENCV = True
+except:
+  HAS_OPENCV = False
 
+
+
+RADIUS  = 25
+WIDTH   = 1
+BLACK   = (0,0,0)
+BLUE    = (0,0,255)
+GREEN   = (0,255,0)
+MAGENTA = (100,0,150)
 
 
 def drawHandles( surf, corners ):
     # TODO give different colors to each
     for ii in range( len(corners) ):
-        pygame.draw.circle(surf, (0,0,255), corners[ii], 25)
+        pygame.draw.circle( surf, BLUE, corners[ii], RADIUS )
 
 
 def drawFrame( surf, corners, color ):
@@ -24,7 +39,7 @@ def drawFrame( surf, corners, color ):
             jj = 0
         else:
             jj = ii+1
-        pygame.draw.line(surf, color, corners[ii], corners[jj], 1)
+        pygame.draw.line( surf, color, corners[ii], corners[jj], WIDTH )
 
 
 def eucliDist( p1, p2 ):
@@ -55,7 +70,7 @@ def normalizeDet( M ):
     isNegative = False
 
     if ( det_M < 0 ) and ( n_cols % 2 == 0 ):
-        raise ArithmeticError("Attempting to find an even root of a negative number")
+        raise ArithmeticError( "Attempting to find an even root of a negative number" )
     if ( det_M < 0 ):
         isNegative = True
         det_M = - det_M
@@ -66,7 +81,7 @@ def normalizeDet( M ):
     return M * a
 
 
-def computeHomography( xss, xds ):
+def computeHomographyMvg( xss, xds ):
     n = len(xss)
     A = np.zeros( (2*n,9) )
     for ii in range(n):
@@ -90,13 +105,24 @@ def computeHomography( xss, xds ):
         A[l2, 7] = -xd[0]*xs[1]
         A[l2, 8] = -xd[0]*1.0
 
-    u, s, vh = np.linalg.svd(A)
+    u, s, vh = np.linalg.svd( A )
     H = np.reshape( vh[-1,:], (3,3) )
     H = normalizeDet( H )
-    print( f'H: {H[0,0]:.4f},{H[0,1]:.4f},{H[0,2]:.4f},{H[1,0]:.4f},{H[1,1]:.4f},{H[1,2]:.4f},{H[2,0]:.4f},{H[2,1]:.4f},{H[2,2]:.4f}')
-    Hinv = np.linalg.inv(H)
-    print( f'Hinv: {Hinv[0,0]:.4f},{Hinv[0,1]:.4f},{Hinv[0,2]:.4f},{Hinv[1,0]:.4f},{Hinv[1,1]:.4f},{Hinv[1,2]:.4f},{Hinv[2,0]:.4f},{Hinv[2,1]:.4f},{Hinv[2,2]:.4f}')
     return H
+
+
+def computeHomographyOcv( xss, xds ):
+    src = np.array( [ [x, y] for (x,y) in xss ], dtype="float32" )
+    dst = np.array( [ [x, y] for (x,y) in xds ], dtype="float32" )
+    H   = cv2.getPerspectiveTransform(src, dst)
+    return H
+
+
+def computeHomography( xss, xds ):
+    if HAS_OPENCV:
+        return computeHomographyOcv( xss, xds )
+    else:
+        return computeHomographyMvg( xss, xds )
 
 
 def testHomography( xss ):
@@ -135,7 +161,8 @@ def testHomography( xss ):
     ## Estimate H_est from xss and xds
     H_est = computeHomography( xss, xds )
 
-    # have a look
+    # Manual check
+    print( "Check ground trust and estimated homographies are almost identical" )
     print( "H gdt: ", H )
     print( "H est: ", H_est )
 
@@ -161,12 +188,11 @@ if __name__ == '__main__':
     h = disp_info.current_h
 
     # Set up the drawing window
-    screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)
+    screen = pygame.display.set_mode( (0,0), pygame.FULLSCREEN )
 
     screen_corners = [ (0,0), (w-1,0), (w-1,h-1), (0,h-1) ]
     moved_corners  = [ (0,0), (w-1,0), (w-1,h-1), (0,h-1) ]
-    mouse_down     = False
-    H              = np.eye(3)
+    iHo            = np.eye(3)
 
     #testHomography(corners)
 
@@ -181,27 +207,28 @@ if __name__ == '__main__':
             elif e.type == pygame.KEYDOWN and ( e.key == K_ESCAPE or e.key == K_q ):
                 running = False
             elif e.type == pygame.KEYDOWN and ( e.key == K_RETURN ):
-                H = computeHomography( screen_corners, moved_corners )
+                iHo = computeHomography( screen_corners, moved_corners )
+                print( "H:\n"\
+                     + f"{iHo[0,0]:.8f},{iHo[0,1]:.8f},{iHo[0,2]:.8f},"\
+                     + f"{iHo[1,0]:.8f},{iHo[1,1]:.8f},{iHo[1,2]:.8f},"\
+                     + f"{iHo[2,0]:.8f},{iHo[2,1]:.8f},{iHo[2,2]:.8f}" )
+                with open("iHo.npy", "wb") as f:
+                    np.save(f, iHo)
             elif e.type == MOUSEBUTTONDOWN:
-                mouse_down = True
-            elif e.type == MOUSEBUTTONUP:
-                mouse_down = False
-
-        if mouse_down:
-            pos = pygame.mouse.get_pos()
-            ii  = findClosestCorner( pos, moved_corners )
-            # TODO update only if that keeps the polygon convex
-            moved_corners[ii] = pos
+                pos = pygame.mouse.get_pos()
+                ii  = findClosestCorner( pos, moved_corners )
+                # TODO update only if that keeps the polygon convex
+                moved_corners[ii] = pos
 
         # Fill the background with black
-        screen.fill( (0,0,0) )
+        screen.fill( BLACK )
 
         # Draw selected borders
         drawHandles( screen, moved_corners )
-        drawFrame( screen, moved_corners, (0,255,0) )
+        drawFrame( screen, moved_corners, GREEN )
 
         # Draw projected borders
-        drawFrame( screen, transformCorners(H,screen_corners), (100,0,150) )
+        drawFrame( screen, transformCorners(iHo,screen_corners), MAGENTA )
 
         # Flip the display
         pygame.display.flip()
