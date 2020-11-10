@@ -193,11 +193,13 @@ if __name__ == '__main__':
     screen_corners = [ (0,0), (w-1,0), (w-1,h-1), (0,h-1) ]
     moved_corners  = [ (0,0), (w-1,0), (w-1,h-1), (0,h-1) ]
     iHo            = np.eye(3)
-
-    #testHomography(corners)
+    oHi            = np.eye(3)
+    X1             = np.reshape( np.array( [0.0, 0.0, 1.0], dtype="float32" ), (3,1) )
+    X2             = np.reshape( np.array( [w  , h  , 1.0], dtype="float32" ), (3,1) )
 
     # Run until the user asks to quit
     running = True
+    mouse_down = False
     while running:
 
         # Events handling
@@ -207,18 +209,36 @@ if __name__ == '__main__':
             elif e.type == pygame.KEYDOWN and ( e.key == K_ESCAPE or e.key == K_q ):
                 running = False
             elif e.type == pygame.KEYDOWN and ( e.key == K_RETURN ):
-                iHo = computeHomography( screen_corners, moved_corners )
-                print( "H:\n"\
+                oHi = computeHomography( screen_corners, moved_corners )
+                iHo = np.linalg.inv( oHi )
+
+                Y1 = iHo @ X1
+                Y1 = Y1 / Y1[2]
+                Y2 = iHo @ X2
+                Y2 = Y2 / Y2[2]
+                dY = Y2 - Y1
+                print( "Feed this to xrandr:\n"\
+                     + f"--fb {m.ceil(abs(dY[0][0]))}x{m.ceil(abs(dY[1][0]))}  "\
+                     + "--transform "\
                      + f"{iHo[0,0]:.8f},{iHo[0,1]:.8f},{iHo[0,2]:.8f},"\
                      + f"{iHo[1,0]:.8f},{iHo[1,1]:.8f},{iHo[1,2]:.8f},"\
                      + f"{iHo[2,0]:.8f},{iHo[2,1]:.8f},{iHo[2,2]:.8f}" )
-                with open("iHo.npy", "wb") as f:
-                    np.save(f, iHo)
+
+                with open("oHi.npy", "wb") as f:
+                    np.save(f, oHi)
+
             elif e.type == MOUSEBUTTONDOWN:
-                pos = pygame.mouse.get_pos()
-                ii  = findClosestCorner( pos, moved_corners )
-                # TODO update only if that keeps the polygon convex
-                moved_corners[ii] = pos
+                mouse_down = True
+
+            elif e.type == MOUSEBUTTONUP:
+                mouse_down = False
+
+
+        if mouse_down:
+            pos = pygame.mouse.get_pos()
+            ii  = findClosestCorner( pos, moved_corners )
+            # TODO update only if that keeps the polygon convex
+            moved_corners[ii] = pos
 
         # Fill the background with black
         screen.fill( BLACK )
